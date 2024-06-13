@@ -1,9 +1,10 @@
 // https://codepen.io/chengarda/pen/wRxoyB
 import { useEffect, useRef } from "react";
+import Rhino from "./assets/rhino.png";
 
 const WIDTH = window.innerWidth;
 const HEIGHT = window.innerHeight;
-const REAL_SET = { start: -2, end: 2 };
+const REAL_SET = { start: -2.5, end: 1 };
 const IMAGINARY_SET = { start: -1.2, end: 1.2 };
 const MAX_ITERATION = 80;
 const cameraOffset = { x: WIDTH / 2, y: HEIGHT / 2 };
@@ -11,12 +12,50 @@ let cameraZoom = 1;
 const MAX_ZOOM = 5;
 const MIN_ZOOM = 0.1;
 const SCROLL_SENSITIVITY = 0.0005;
+const COLORS = ["#000000", "#eb2832", "#5454ff"];
 
-const colors = new Array(16)
-  .fill(0)
-  .map((_, i) =>
-    i === 0 ? "#000" : `#${(((1 << 24) * Math.random()) | 0).toString(16)}`
-  );
+type RGB = [number, number, number];
+
+const convertToInt = (colorHex: string): RGB => {
+  if (colorHex[0] === "#") colorHex = colorHex.slice(1);
+  const R = colorHex.substring(0, 2);
+  const G = colorHex.substring(2, 4);
+  const B = colorHex.substring(4, 6);
+
+  return [parseInt(R, 16), parseInt(G, 16), parseInt(B, 16)];
+};
+
+const getColorAtPos = (position: number, colorHexs: string[]): string => {
+  const colorStops = colorHexs.map((hex, index) => ({
+    hex,
+    stop: index / (colorHexs.length - 1),
+  }));
+
+  let stopIndex = 0;
+  while (
+    stopIndex < colorStops.length &&
+    colorStops[stopIndex + 1].stop < position
+  ) {
+    stopIndex++;
+  }
+
+  const startStop = colorStops[stopIndex].stop;
+  const endStop = colorStops[stopIndex + 1].stop;
+  const relativePosition = (position - startStop) / (endStop - startStop);
+
+  const startColor = convertToInt(colorHexs[stopIndex]);
+  const endColor = convertToInt(colorHexs[stopIndex + 1]);
+  const startMultiplier = 1 - relativePosition;
+  const endMultiplier = relativePosition;
+  const finalRGB = [];
+  for (let i = 0; i <= 2; i++) {
+    finalRGB.push(
+      startColor[i] * startMultiplier + endColor[i] * endMultiplier
+    );
+  }
+
+  return `rgb(${finalRGB.join(",")})`;
+};
 
 const mandelbrot = (xComplex: number, yComplex: number): [number, boolean] => {
   let a = 0;
@@ -37,7 +76,7 @@ const mandelbrot = (xComplex: number, yComplex: number): [number, boolean] => {
 };
 
 const drawPixel = (
-  ctx: CanvasRenderingContext2D,
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   x: number,
   y: number,
   color: string
@@ -46,7 +85,11 @@ const drawPixel = (
   ctx.fillRect(x, y, 1, 1);
 };
 
-const drawMandelbrot = (ctx: CanvasRenderingContext2D) => {
+const drawMandelbrot = () => {
+  const temp = new OffscreenCanvas(WIDTH, HEIGHT);
+  const context = temp.getContext("2d");
+  if (!context) return temp;
+  console.time("drawMandelbrot");
   for (let i = 0; i < WIDTH; i++) {
     for (let j = 0; j < HEIGHT; j++) {
       const xComplex =
@@ -55,20 +98,27 @@ const drawMandelbrot = (ctx: CanvasRenderingContext2D) => {
         IMAGINARY_SET.start +
         (j / HEIGHT) * (IMAGINARY_SET.end - IMAGINARY_SET.start);
 
-      const [m, isMandelbrotSet] = mandelbrot(xComplex, yComplex);
-      console.log(i, j);
+      const [interations, isMandelbrotSet] = mandelbrot(xComplex, yComplex);
+
       drawPixel(
-        ctx,
+        context,
         i,
         j,
-        colors[isMandelbrotSet ? 0 : (m % colors.length) - 1 + 1]
+        PRELOADED_COLORS[isMandelbrotSet ? 0 : interations]
       );
     }
   }
+  console.timeEnd("drawMandelbrot");
+  return temp;
 };
+
+const PRELOADED_COLORS = Array(MAX_ITERATION)
+  .fill(0)
+  .map((_, index) => getColorAtPos(index / (MAX_ITERATION - 1), COLORS));
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const image = useRef<OffscreenCanvas>();
   const isDragging = useRef(false);
   const isSetDrawn = useRef(false);
   const dragStart = { x: 0, y: 0 };
@@ -83,21 +133,16 @@ function App() {
     ctx.scale(cameraZoom, cameraZoom);
     ctx.translate(-WIDTH / 2 + cameraOffset.x, -HEIGHT / 2 + cameraOffset.y);
 
-    // TODO: Memoize mandelbrot to reduce redraw
-    // We can do this by returning a canvas image then setting this to a key of the Real & Imaginary set
-    if (!isSetDrawn.current) {
-      // Translate to the canvas centre before zooming - so you'll always zoom on what you're looking directly at
+    if (image.current /* && !isSetDrawn.current */) {
       ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
-      drawMandelbrot(ctx);
-      console.log(isSetDrawn);
+      const img = new Image();
+      img.src = Rhino;
+
+      ctx.drawImage(image.current, -WIDTH / 2, -HEIGHT / 2);
+
       isSetDrawn.current = true;
     }
-
-    ctx.fillStyle = "#eecc77";
-    ctx.fillRect(-35, -35, 20, 20);
-    ctx.fillRect(15, -35, 20, 20);
-    ctx.fillRect(-35, 15, 70, 20);
 
     requestAnimationFrame(() => draw(ctx));
   };
@@ -198,6 +243,7 @@ function App() {
       if (context) {
         context.canvas.width = WIDTH;
         context.canvas.height = HEIGHT;
+        image.current = drawMandelbrot();
         draw(context);
       }
 
@@ -216,6 +262,24 @@ function App() {
   return (
     <>
       <canvas ref={canvasRef} />
+      <div style={{ position: "absolute", bottom: 0, width: "100%" }}>
+        <input
+          type="range"
+          min={-10}
+          max={10}
+          onBlur={(e) => console.log(e.target.value)}
+        />
+        <div
+          style={{
+            width: "100%",
+            height: 24,
+            background: `linear-gradient(to right, ${Array(100)
+              .fill(0)
+              .map((_, i) => getColorAtPos(i / 100, COLORS))
+              .join(",")})`,
+          }}
+        ></div>
+      </div>
     </>
   );
 }
