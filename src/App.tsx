@@ -1,9 +1,8 @@
 // https://codepen.io/chengarda/pen/wRxoyB
 import { useEffect, useRef } from "react";
-import Rhino from "./assets/rhino.png";
 
-const WIDTH = window.innerWidth;
-const HEIGHT = window.innerHeight;
+const WIDTH = 500;
+const HEIGHT = 500;
 const REAL_SET = { start: -2.5, end: 1 };
 const IMAGINARY_SET = { start: -1.2, end: 1.2 };
 const MAX_ITERATION = 80;
@@ -135,12 +134,7 @@ function App() {
 
     if (image.current /* && !isSetDrawn.current */) {
       ctx.clearRect(0, 0, WIDTH, HEIGHT);
-
-      const img = new Image();
-      img.src = Rhino;
-
       ctx.drawImage(image.current, -WIDTH / 2, -HEIGHT / 2);
-
       isSetDrawn.current = true;
     }
 
