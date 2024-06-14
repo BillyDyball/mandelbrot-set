@@ -1,101 +1,42 @@
 // https://codepen.io/chengarda/pen/wRxoyB
 import { useEffect, useRef } from "react";
+import ControlDialog from "./components/ControlDialog";
+import { Resolution } from "./types/common.types";
+import { drawPixel, getColorAtPos } from "./utils/canvas.utils";
+import { mandelbrot } from "./utils/mandelbrot.utils";
 
-const WIDTH = 500;
-const HEIGHT = 500;
-const REAL_SET = { start: -2.5, end: 1 };
-const IMAGINARY_SET = { start: -1.2, end: 1.2 };
-const MAX_ITERATION = 80;
-const cameraOffset = { x: WIDTH / 2, y: HEIGHT / 2 };
+interface MandelbrotSet {
+  real: {
+    start: number;
+    end: number;
+  };
+  imaginary: {
+    start: number;
+    end: number;
+  };
+}
+
 let cameraZoom = 1;
 const MAX_ZOOM = 5;
 const MIN_ZOOM = 0.1;
 const SCROLL_SENSITIVITY = 0.0005;
 const COLORS = ["#000000", "#eb2832", "#5454ff"];
 
-type RGB = [number, number, number];
-
-const convertToInt = (colorHex: string): RGB => {
-  if (colorHex[0] === "#") colorHex = colorHex.slice(1);
-  const R = colorHex.substring(0, 2);
-  const G = colorHex.substring(2, 4);
-  const B = colorHex.substring(4, 6);
-
-  return [parseInt(R, 16), parseInt(G, 16), parseInt(B, 16)];
-};
-
-const getColorAtPos = (position: number, colorHexs: string[]): string => {
-  const colorStops = colorHexs.map((hex, index) => ({
-    hex,
-    stop: index / (colorHexs.length - 1),
-  }));
-
-  let stopIndex = 0;
-  while (
-    stopIndex < colorStops.length &&
-    colorStops[stopIndex + 1].stop < position
-  ) {
-    stopIndex++;
-  }
-
-  const startStop = colorStops[stopIndex].stop;
-  const endStop = colorStops[stopIndex + 1].stop;
-  const relativePosition = (position - startStop) / (endStop - startStop);
-
-  const startColor = convertToInt(colorHexs[stopIndex]);
-  const endColor = convertToInt(colorHexs[stopIndex + 1]);
-  const startMultiplier = 1 - relativePosition;
-  const endMultiplier = relativePosition;
-  const finalRGB = [];
-  for (let i = 0; i <= 2; i++) {
-    finalRGB.push(
-      startColor[i] * startMultiplier + endColor[i] * endMultiplier
-    );
-  }
-
-  return `rgb(${finalRGB.join(",")})`;
-};
-
-const mandelbrot = (xComplex: number, yComplex: number): [number, boolean] => {
-  let a = 0;
-  let b = 0;
-  let iterations = 0;
-  let d = 0;
-  while (d <= 2 && iterations < MAX_ITERATION) {
-    const aa = Math.pow(a, 2) - Math.pow(b, 2);
-    const bb = 2 * a * b;
-
-    a = aa + xComplex;
-    b = bb + yComplex;
-
-    d = Math.sqrt(Math.pow(a, 2) + Math.pow(b, 2));
-    iterations++;
-  }
-  return [iterations, d <= 2];
-};
-
-const drawPixel = (
-  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
-  x: number,
-  y: number,
-  color: string
-) => {
-  ctx.fillStyle = color;
-  ctx.fillRect(x, y, 1, 1);
-};
-
-const drawMandelbrot = () => {
-  const temp = new OffscreenCanvas(WIDTH, HEIGHT);
+const drawMandelbrot = (set: MandelbrotSet, { width, height }: Resolution) => {
+  const temp = new OffscreenCanvas(width, height);
   const context = temp.getContext("2d");
+  console.log("draw");
   if (!context) return temp;
   console.time("drawMandelbrot");
-  for (let i = 0; i < WIDTH; i++) {
-    for (let j = 0; j < HEIGHT; j++) {
-      const xComplex =
-        REAL_SET.start + (i / WIDTH) * (REAL_SET.end - REAL_SET.start);
+
+  const { real, imaginary } = set;
+  console.log(real, imaginary);
+
+  for (let i = 0; i < width; i++) {
+    for (let j = 0; j < height; j++) {
+      const xComplex = real.start + (i / width) * (real.end - real.start);
       const yComplex =
-        IMAGINARY_SET.start +
-        (j / HEIGHT) * (IMAGINARY_SET.end - IMAGINARY_SET.start);
+        imaginary.start + (j / height) * (imaginary.end - imaginary.start);
 
       const [interations, isMandelbrotSet] = mandelbrot(xComplex, yComplex);
 
@@ -111,35 +52,26 @@ const drawMandelbrot = () => {
   return temp;
 };
 
-const PRELOADED_COLORS = Array(MAX_ITERATION)
+const PRELOADED_COLORS = Array(100)
   .fill(0)
-  .map((_, index) => getColorAtPos(index / (MAX_ITERATION - 1), COLORS));
+  .map((_, index) => getColorAtPos(index / (100 - 1), COLORS));
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const image = useRef<OffscreenCanvas>();
   const isDragging = useRef(false);
   const isSetDrawn = useRef(false);
-  const dragStart = { x: 0, y: 0 };
+  const resolution = useRef<{ width: number; height: number }>({
+    width: 1280,
+    height: 1024,
+  });
+  const defaultMandelbrotSet = useRef<MandelbrotSet>({
+    real: { start: -2.5, end: 1 },
+    imaginary: { start: -1.2, end: 1.2 },
+  });
+  const mandelbrotSet = useRef<MandelbrotSet>(defaultMandelbrotSet.current);
   let initialPinchDistance: null | number = null;
   let lastZoom = cameraZoom;
-
-  const draw = (ctx: CanvasRenderingContext2D) => {
-    ctx.canvas.width = WIDTH;
-    ctx.canvas.height = HEIGHT;
-
-    ctx.translate(WIDTH / 2, HEIGHT / 2);
-    ctx.scale(cameraZoom, cameraZoom);
-    ctx.translate(-WIDTH / 2 + cameraOffset.x, -HEIGHT / 2 + cameraOffset.y);
-
-    if (image.current /* && !isSetDrawn.current */) {
-      ctx.clearRect(0, 0, WIDTH, HEIGHT);
-      ctx.drawImage(image.current, -WIDTH / 2, -HEIGHT / 2);
-      isSetDrawn.current = true;
-    }
-
-    requestAnimationFrame(() => draw(ctx));
-  };
 
   // Gets the relevant location from a mouse or single touch event
   const getEventLocation = (
@@ -155,8 +87,31 @@ function App() {
 
   const onPointerDown = (e: MouseEvent | TouchEvent) => {
     isDragging.current = true;
-    dragStart.x = getEventLocation(e).x / cameraZoom - cameraOffset.x;
-    dragStart.y = getEventLocation(e).y / cameraZoom - cameraOffset.y;
+    const { x, y } = getEventLocation(e);
+    const relativeX = x / window.innerWidth;
+    const relativeY = y / window.innerHeight;
+    // console.log(getEventLocation(e), relativeX, relativeY);
+
+    // Zoom in by 10%
+    const zoomMultiplier = 0.1;
+
+    const { real, imaginary } = mandelbrotSet.current;
+
+    const realZoom = Math.abs(real.start - real.end) * zoomMultiplier;
+    const imaginaryZoom =
+      Math.abs(imaginary.start - imaginary.end) * zoomMultiplier;
+
+    mandelbrotSet.current = {
+      real: {
+        start: real.start + realZoom * (1 - relativeX),
+        end: real.end - realZoom * relativeX,
+      },
+      imaginary: {
+        start: imaginary.start + imaginaryZoom * (1 - relativeY),
+        end: imaginary.end - imaginaryZoom * relativeY,
+      },
+    };
+    image.current = drawMandelbrot(mandelbrotSet.current, resolution.current);
   };
 
   const onPointerUp = () => {
@@ -167,8 +122,8 @@ function App() {
 
   const onPointerMove = (e: MouseEvent | TouchEvent) => {
     if (isDragging.current) {
-      cameraOffset.x = getEventLocation(e).x / cameraZoom - dragStart.x;
-      cameraOffset.y = getEventLocation(e).y / cameraZoom - dragStart.y;
+      // cameraOffset.x = getEventLocation(e).x / cameraZoom - dragStart.x;
+      // cameraOffset.y = getEventLocation(e).y / cameraZoom - dragStart.y;
     }
   };
 
@@ -214,6 +169,54 @@ function App() {
     }
   };
 
+  const resetSet = () => {
+    mandelbrotSet.current = defaultMandelbrotSet.current;
+    image.current = drawMandelbrot(mandelbrotSet.current, resolution.current);
+  };
+
+  const download = async () => {
+    const canvas = image.current;
+    if (!canvas) return;
+
+    // Convert offscreen canvas to blob url
+    const blob = await canvas.convertToBlob();
+    const canvasImage = URL.createObjectURL(blob);
+
+    // This can be used to download any image from webpage to local disk
+    const xhr = new XMLHttpRequest();
+    xhr.responseType = "blob";
+    xhr.onload = function () {
+      const a = document.createElement("a");
+      a.href = window.URL.createObjectURL(xhr.response);
+      a.download = "mandelbrotset.png";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
+    // This is to download the canvas Image
+    xhr.open("GET", canvasImage);
+    xhr.send();
+  };
+
+  const draw = (ctx: CanvasRenderingContext2D) => {
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+
+    ctx.canvas.width = screenWidth;
+    ctx.canvas.height = screenHeight;
+
+    if (image.current) {
+      ctx.clearRect(0, 0, screenWidth, screenHeight);
+      const { width, height } = resolution.current;
+      ctx.scale(screenWidth / width, screenHeight / height);
+      ctx.drawImage(image.current, 0, 0);
+      isSetDrawn.current = true;
+    }
+
+    requestAnimationFrame(() => draw(ctx));
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (canvas) {
@@ -235,9 +238,10 @@ function App() {
 
       const context = canvas.getContext("2d");
       if (context) {
-        context.canvas.width = WIDTH;
-        context.canvas.height = HEIGHT;
-        image.current = drawMandelbrot();
+        image.current = drawMandelbrot(
+          mandelbrotSet.current,
+          resolution.current
+        );
         draw(context);
       }
 
@@ -256,23 +260,11 @@ function App() {
   return (
     <>
       <canvas ref={canvasRef} />
-      <div style={{ position: "absolute", bottom: 0, width: "100%" }}>
-        <input
-          type="range"
-          min={-10}
-          max={10}
-          onBlur={(e) => console.log(e.target.value)}
-        />
-        <div
-          style={{
-            width: "100%",
-            height: 24,
-            background: `linear-gradient(to right, ${Array(100)
-              .fill(0)
-              .map((_, i) => getColorAtPos(i / 100, COLORS))
-              .join(",")})`,
-          }}
-        ></div>
+      <ControlDialog />
+      <div style={{ position: "absolute", top: 0, color: "white" }}>
+        {`${resolution.current.width}x${resolution.current.height}`}
+        <button onClick={resetSet}>reset</button>
+        <button onClick={download}>download</button>
       </div>
     </>
   );
