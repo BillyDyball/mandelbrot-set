@@ -6,7 +6,14 @@ import ColorGradient from "./ColorGradient";
 import IconLink from "./IconLink";
 import InputField from "./InputField";
 import Link from "./Link";
-import Select from "./Select";
+import { Resolution } from "../types/common.types";
+
+const resolutions: Resolution[] = [
+  { width: 1024, height: 768 },
+  { width: 1280, height: 800 },
+  { width: 1280, height: 1024 },
+  { width: 2560, height: 1440 },
+];
 
 function ControlDialog() {
   const [open, setOpen] = useState<boolean>(false);
@@ -40,17 +47,18 @@ function ControlDialog() {
       />
       <div className={sidebarContainerClasses}>
         <div className={sidebarClasses}>
-          <InputField label="Resolution">
-            <Select>
-              <option selected hidden>
-                Choose a resolution
-              </option>
-              <option value="US">1024×768</option>
-              <option value="CA">1280×800</option>
-              <option value="FR">1280×1024</option>
-              <option value="DE">2560×1440</option>
-            </Select>
-          </InputField>
+          <div className="flex flex-row flex-wrap gap-1">
+            {resolutions.map(({ width, height }, index) => (
+              <InputField
+                key={index}
+                containerClasses="basis-[49.4%] cursor-pointer bg-grey-00"
+              >
+                <p>
+                  {width}x{height}
+                </p>
+              </InputField>
+            ))}
+          </div>
 
           <InputField containerClasses="pt-7">
             <ColorGradient colors={controls.colors} />

@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { classNames } from "../utils/common.utils";
 
 interface InputFieldProps {
   children: ReactNode;
@@ -9,10 +10,12 @@ interface InputFieldProps {
 function InputField({ children, containerClasses, label }: InputFieldProps) {
   return (
     <div
-      className={
-        "h-fit w-full bg-gray-300 rounded-md bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-40 p-2 " +
-        containerClasses
-      }
+      className={classNames(
+        "h-fit w-full bg-gray-300 rounded-md bg-clip-padding backdrop-filter backdrop-blur-md bg-opacity-40 p-2",
+        {
+          [`${containerClasses}`]: Boolean(containerClasses),
+        }
+      )}
     >
       {label && (
         <label
