@@ -7,3 +7,13 @@ export interface ColorStop {
   /** 0 - 1, 0.5 = 50% */
   stop: number;
 }
+
+export interface ComplexSet {
+  start: number;
+  end: number;
+}
+
+export interface MandelbrotSet {
+  real: ComplexSet;
+  imaginary: ComplexSet;
+}

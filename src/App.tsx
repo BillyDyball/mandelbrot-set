@@ -1,53 +1,8 @@
 // https://codepen.io/chengarda/pen/wRxoyB
 import { useEffect, useRef } from "react";
 import ControlDialog from "./components/ControlDialog";
-import { Resolution } from "./types/common.types";
-import { drawPixel, getColorAtPos } from "./utils/canvas.utils";
-import { mandelbrot } from "./utils/mandelbrot.utils";
-
-interface Set {
-  start: number;
-  end: number;
-}
-
-interface MandelbrotSet {
-  real: Set;
-  imaginary: Set;
-}
-
-const COLORS = ["#000000", "#eb2832", "#5454ff"];
-
-const drawMandelbrot = (set: MandelbrotSet, { width, height }: Resolution) => {
-  const temp = new OffscreenCanvas(width, height);
-  const context = temp.getContext("2d");
-  if (!context) return temp;
-
-  console.time("drawMandelbrot");
-  const { real, imaginary } = set;
-
-  for (let i = 0; i < width; i++) {
-    for (let j = 0; j < height; j++) {
-      const xComplex = real.start + (i / width) * (real.end - real.start);
-      const yComplex =
-        imaginary.start + (j / height) * (imaginary.end - imaginary.start);
-
-      const [interations, isMandelbrotSet] = mandelbrot(xComplex, yComplex);
-
-      drawPixel(
-        context,
-        i,
-        j,
-        PRELOADED_COLORS[isMandelbrotSet ? 0 : interations]
-      );
-    }
-  }
-  console.timeEnd("drawMandelbrot");
-  return temp;
-};
-
-const PRELOADED_COLORS = Array(100)
-  .fill(0)
-  .map((_, index) => getColorAtPos(index / (100 - 1), COLORS));
+import { ComplexSet, MandelbrotSet } from "./types/common.types";
+import { drawMandelbrot } from "./utils/mandelbrot.utils";
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -77,7 +32,7 @@ function App() {
   };
 
   const zoomSet = (
-    set: Set,
+    set: ComplexSet,
     // 0 - 1, 0 = start remains the same, 1 = end remains the same
     rotation: number = 0.5,
     zoomMultiplier: number = 0.1
@@ -87,7 +42,7 @@ function App() {
     const normalize = { start: 0, end: set.end + offset };
     const zoomAmount = normalize.end * zoomMultiplier;
     normalize.start += zoomAmount * rotation;
-    normalize.end += zoomAmount * 1 - rotation;
+    normalize.end -= zoomAmount * (1 - rotation);
 
     return {
       start: normalize.start - offset,
