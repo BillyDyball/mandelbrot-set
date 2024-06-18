@@ -5,32 +5,25 @@ import { Resolution } from "./types/common.types";
 import { drawPixel, getColorAtPos } from "./utils/canvas.utils";
 import { mandelbrot } from "./utils/mandelbrot.utils";
 
-interface MandelbrotSet {
-  real: {
-    start: number;
-    end: number;
-  };
-  imaginary: {
-    start: number;
-    end: number;
-  };
+interface Set {
+  start: number;
+  end: number;
 }
 
-let cameraZoom = 1;
-const MAX_ZOOM = 5;
-const MIN_ZOOM = 0.1;
-const SCROLL_SENSITIVITY = 0.0005;
+interface MandelbrotSet {
+  real: Set;
+  imaginary: Set;
+}
+
 const COLORS = ["#000000", "#eb2832", "#5454ff"];
 
 const drawMandelbrot = (set: MandelbrotSet, { width, height }: Resolution) => {
   const temp = new OffscreenCanvas(width, height);
   const context = temp.getContext("2d");
-  console.log("draw");
   if (!context) return temp;
-  console.time("drawMandelbrot");
 
+  console.time("drawMandelbrot");
   const { real, imaginary } = set;
-  console.log(real, imaginary);
 
   for (let i = 0; i < width; i++) {
     for (let j = 0; j < height; j++) {
@@ -70,8 +63,6 @@ function App() {
     imaginary: { start: -1.2, end: 1.2 },
   });
   const mandelbrotSet = useRef<MandelbrotSet>(defaultMandelbrotSet.current);
-  let initialPinchDistance: null | number = null;
-  let lastZoom = cameraZoom;
 
   // Gets the relevant location from a mouse or single touch event
   const getEventLocation = (
@@ -80,9 +71,28 @@ function App() {
     if ("clientX" in e) {
       return { x: e.clientX, y: e.clientY };
     } else if (e.touches.length > 1) {
-      return { x: e.touches[0]?.clientX, y: e.touches[0].clientY };
+      return { x: e.touches[0].clientX, y: e.touches[0].clientY };
     }
     return { x: 0, y: 0 };
+  };
+
+  const zoomSet = (
+    set: Set,
+    // 0 - 1, 0 = start remains the same, 1 = end remains the same
+    rotation: number = 0.5,
+    zoomMultiplier: number = 0.1
+  ) => {
+    // normalize set to start at 0
+    const offset = -set.start;
+    const normalize = { start: 0, end: set.end + offset };
+    const zoomAmount = normalize.end * zoomMultiplier;
+    normalize.start += zoomAmount * rotation;
+    normalize.end += zoomAmount * 1 - rotation;
+
+    return {
+      start: normalize.start - offset,
+      end: normalize.end - offset,
+    };
   };
 
   const onPointerDown = (e: MouseEvent | TouchEvent) => {
@@ -90,41 +100,21 @@ function App() {
     const { x, y } = getEventLocation(e);
     const relativeX = x / window.innerWidth;
     const relativeY = y / window.innerHeight;
-    // console.log(getEventLocation(e), relativeX, relativeY);
 
     // Zoom in by 10%
-    const zoomMultiplier = 0.1;
+    const zoomMultiplier = 0.25;
 
     const { real, imaginary } = mandelbrotSet.current;
 
-    const realZoom = Math.abs(real.start - real.end) * zoomMultiplier;
-    const imaginaryZoom =
-      Math.abs(imaginary.start - imaginary.end) * zoomMultiplier;
-
     mandelbrotSet.current = {
-      real: {
-        start: real.start + realZoom * (1 - relativeX),
-        end: real.end - realZoom * relativeX,
-      },
-      imaginary: {
-        start: imaginary.start + imaginaryZoom * (1 - relativeY),
-        end: imaginary.end - imaginaryZoom * relativeY,
-      },
+      real: zoomSet(real, relativeX, zoomMultiplier),
+      imaginary: zoomSet(imaginary, relativeY, zoomMultiplier),
     };
     image.current = drawMandelbrot(mandelbrotSet.current, resolution.current);
   };
 
   const onPointerUp = () => {
     isDragging.current = false;
-    initialPinchDistance = null;
-    lastZoom = cameraZoom;
-  };
-
-  const onPointerMove = (e: MouseEvent | TouchEvent) => {
-    if (isDragging.current) {
-      // cameraOffset.x = getEventLocation(e).x / cameraZoom - dragStart.x;
-      // cameraOffset.y = getEventLocation(e).y / cameraZoom - dragStart.y;
-    }
   };
 
   const handleTouch = (
@@ -133,39 +123,6 @@ function App() {
   ) => {
     if (e.touches.length == 1) {
       singleTouchHandler(e);
-    } else if (e.type == "touchmove" && e.touches.length == 2) {
-      isDragging.current = false;
-      handlePinch(e);
-    }
-  };
-
-  const handlePinch = (e: TouchEvent) => {
-    e.preventDefault();
-
-    const touch1 = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    const touch2 = { x: e.touches[1].clientX, y: e.touches[1].clientY };
-
-    // This is distance squared, but no need for an expensive sqrt as it's only used in ratio
-    const currentDistance =
-      (touch1.x - touch2.x) ** 2 + (touch1.y - touch2.y) ** 2;
-
-    if (initialPinchDistance == null) {
-      initialPinchDistance = currentDistance;
-    } else {
-      adjustZoom(null, currentDistance / initialPinchDistance);
-    }
-  };
-
-  const adjustZoom = (zoomAmount: number | null, zoomFactor?: number) => {
-    if (!isDragging.current) {
-      if (zoomAmount) {
-        cameraZoom += zoomAmount;
-      } else if (zoomFactor) {
-        cameraZoom = zoomFactor * lastZoom;
-      }
-
-      cameraZoom = Math.min(cameraZoom, MAX_ZOOM);
-      cameraZoom = Math.max(cameraZoom, MIN_ZOOM);
     }
   };
 
@@ -222,19 +179,13 @@ function App() {
     if (canvas) {
       const start = onPointerDown;
       const end = onPointerUp;
-      const move = onPointerMove;
-      const zoom = (e: WheelEvent) => adjustZoom(e.deltaY * SCROLL_SENSITIVITY);
       const touchStart = (e: TouchEvent) => handleTouch(e, onPointerDown);
       const touchEnd = (e: TouchEvent) => handleTouch(e, onPointerUp);
-      const touchMove = (e: TouchEvent) => handleTouch(e, onPointerMove);
 
       canvas.addEventListener("mousedown", start);
       canvas.addEventListener("mouseup", end);
-      canvas.addEventListener("mousemove", move);
       canvas.addEventListener("touchstart", touchStart);
       canvas.addEventListener("touchend", touchEnd);
-      canvas.addEventListener("touchmove", touchMove);
-      canvas.addEventListener("wheel", zoom);
 
       const context = canvas.getContext("2d");
       if (context) {
@@ -248,11 +199,8 @@ function App() {
       return () => {
         canvas.removeEventListener("mousedown", start);
         canvas.removeEventListener("mouseup", end);
-        canvas.removeEventListener("mousemove", move);
         canvas.removeEventListener("touchstart", touchStart);
         canvas.removeEventListener("touchend", touchEnd);
-        canvas.removeEventListener("touchmove", touchMove);
-        canvas.removeEventListener("wheel", zoom);
       };
     }
   }, [canvasRef]);

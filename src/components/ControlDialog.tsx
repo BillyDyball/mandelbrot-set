@@ -24,13 +24,21 @@ function ControlDialog() {
     [open]
   );
 
+  const sidebarContainerClasses = useMemo(
+    () =>
+      classNames("h-screen w-fit absolute top-0 right-0 py-4 box-border", {
+        "pointer-events-none": !open,
+      }),
+    [open]
+  );
+
   return (
     <>
       <button
         className="h-20 w-4 absolute top-1/2 right-0 rounded-l-lg z-10 bg-clip-padding backdrop-filter backdrop-blur-md bg-gray-400 bg-opacity-20"
         onClick={() => setOpen((prev) => !prev)}
       />
-      <div className="h-screen w-fit absolute top-0 right-0 py-4 box-border">
+      <div className={sidebarContainerClasses}>
         <div className={sidebarClasses}>
           <InputField label="Resolution">
             <Select>
